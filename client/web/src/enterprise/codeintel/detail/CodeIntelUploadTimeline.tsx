@@ -24,7 +24,9 @@ export const CodeIntelUploadTimeline: FunctionComponent<CodeIntelUploadTimelineP
                 ...dumpUploadStage(upload),
                 ...processingStage(upload),
             ]
-            if(upload.state === LSIFUploadState.COMPLETED) {stages.push({ icon: <CheckIcon />, text: 'Finished', date: upload.finishedAt, className: 'bg-success' })}
+            if(upload.state === LSIFUploadState.COMPLETED) {
+                stages.push({ icon: <CheckIcon />, text: 'Finished', date: upload.finishedAt, className: 'bg-success' })
+            }
             return stages
         },
         [upload]
