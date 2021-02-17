@@ -80,7 +80,7 @@ func scanUploads(rows *sql.Rows, queryErr error) (_ []Upload, err error) {
 			return nil, err
 		}
 
-		uploadedParts := []int{}
+		uploadedParts := make([]int, 0, len(rawUploadedParts))
 		for _, uploadedPart := range rawUploadedParts {
 			uploadedParts = append(uploadedParts, int(uploadedPart.Int32))
 		}
