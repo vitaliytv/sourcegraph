@@ -9,7 +9,10 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/aws/aws-sdk-go/aws/awserr"
+	"github.com/aws/aws-sdk-go/service/s3/s3manager"
 	"github.com/inconshreveable/log15"
+	"github.com/pkg/errors"
 )
 
 func sanitizeRoot(s string) string {
@@ -53,4 +56,18 @@ func writeJSON(w http.ResponseWriter, payload interface{}) {
 	}
 
 	copyAll(w, bytes.NewReader(data))
+}
+
+func formatAWSError(err awserr.Error) (reason string) {
+	var s3Err s3manager.MultiUploadFailure
+	if errors.As(err, &s3Err) {
+		if s3Err.OrigErr() != nil {
+			return s3Err.OrigErr().Error()
+		} else {
+			return s3Err.Error()
+		}
+	} else {
+		reason = err.Message()
+	}
+	return
 }

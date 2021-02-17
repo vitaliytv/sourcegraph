@@ -2,6 +2,7 @@ import * as H from 'history'
 import { upperFirst } from 'lodash'
 import React, { FunctionComponent } from 'react'
 import { ErrorMessage } from '../../../components/alerts'
+import { Collapsible } from '../../../components/Collapsible'
 import { LSIFIndexState, LSIFUploadState } from '../../../graphql-operations'
 
 export interface CodeIntelStateDescriptionProps {
@@ -36,7 +37,7 @@ export const CodeIntelStateDescription: FunctionComponent<CodeIntelStateDescript
         <span className={className}>{upperFirst(typeName)} processed successfully.</span>
     ) : state === LSIFUploadState.ERRORED || state === LSIFIndexState.ERRORED ? (
         <span className={className}>
-            {upperFirst(typeName)} failed to complete: <ErrorMessage error={failure} history={history} />
+            {upperFirst(typeName)} failed to complete: <ErrorMessage error={failure/* ?.split('\n')[0] */} history={history} />
         </span>
     ) : (
         <></>
