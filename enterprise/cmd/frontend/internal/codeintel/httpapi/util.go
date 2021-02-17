@@ -58,16 +58,15 @@ func writeJSON(w http.ResponseWriter, payload interface{}) {
 	copyAll(w, bytes.NewReader(data))
 }
 
-func formatAWSError(err awserr.Error) (reason string) {
+func formatAWSError(err awserr.Error) string {
 	var s3Err s3manager.MultiUploadFailure
 	if errors.As(err, &s3Err) {
 		if s3Err.OrigErr() != nil {
 			return s3Err.OrigErr().Error()
-		} else {
-			return s3Err.Error()
 		}
-	} else {
-		reason = err.Message()
+
+		return s3Err.Error()
 	}
-	return
+
+	return err.Message()
 }
