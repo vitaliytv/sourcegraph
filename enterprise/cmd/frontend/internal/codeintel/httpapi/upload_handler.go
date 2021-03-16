@@ -12,6 +12,7 @@ import (
 	"strconv"
 
 	"github.com/aws/aws-sdk-go/aws/awserr"
+	"github.com/aws/aws-sdk-go/service/s3/s3manager"
 	"github.com/inconshreveable/log15"
 	"github.com/sourcegraph/codeintelutils"
 
@@ -403,14 +404,27 @@ func (h *UploadHandler) markUploadAsFailed(ctx context.Context, uploadID int, er
 	)
 
 	if _, ok := err.(*ClientError); ok {
-		message = "client misbehaving"
+		message = fmt.Sprintf("client misbehaving:\n* %s", err)
 	} else if errors.As(err, &awsErr) {
-		message = "object store error"
+		message = fmt.Sprintf("object store error:\n* %s", formatAWSError(awsErr))
 	} else {
 		return
 	}
 
-	if markErr := h.dbStore.MarkFailed(ctx, uploadID, fmt.Sprintf("%s:\n* %s", message, err.Error())); markErr != nil {
+	if markErr := h.dbStore.MarkFailed(ctx, uploadID, message); markErr != nil {
 		log15.Error("Failed to mark upload as failed", "error", markErr)
 	}
+}
+
+func formatAWSError(err awserr.Error) string {
+	var s3Err s3manager.MultiUploadFailure
+	if errors.As(err, &s3Err) {
+		if s3Err.OrigErr() != nil {
+			return s3Err.OrigErr().Error()
+		}
+
+		return s3Err.Error()
+	}
+
+	return err.Message()
 }
