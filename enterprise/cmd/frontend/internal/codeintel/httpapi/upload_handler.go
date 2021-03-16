@@ -182,6 +182,8 @@ func (h *UploadHandler) handleEnqueueErr(w http.ResponseWriter, r *http.Request,
 // handleEnqueueSinglePayload handles a non-multipart upload. This creates an upload record
 // with state 'queued', proxies the data to the bundle manager, and returns the generated ID.
 func (h *UploadHandler) handleEnqueueSinglePayload(r *http.Request, uploadArgs UploadArgs) (interface{}, error) {
+	ctx := r.Context()
+
 	if uploadArgs.Indexer == "" {
 		indexer, err := inferIndexer(r)
 		if err != nil {
@@ -190,8 +192,6 @@ func (h *UploadHandler) handleEnqueueSinglePayload(r *http.Request, uploadArgs U
 
 		uploadArgs.Indexer = indexer
 	}
-
-	ctx := r.Context()
 
 	tx, err := h.dbStore.Transact(ctx)
 	if err != nil {
@@ -239,7 +239,9 @@ func (h *UploadHandler) handleEnqueueSinglePayload(r *http.Request, uploadArgs U
 // new upload record with state 'uploading' and returns the generated ID to be used in subsequent
 // requests for the same upload.
 func (h *UploadHandler) handleEnqueueMultipartSetup(r *http.Request, uploadArgs UploadArgs, numParts int) (interface{}, error) {
-	id, err := h.dbStore.InsertUpload(r.Context(), store.Upload{
+	ctx := r.Context()
+
+	id, err := h.dbStore.InsertUpload(ctx, store.Upload{
 		Commit:            uploadArgs.Commit,
 		Root:              uploadArgs.Root,
 		RepositoryID:      uploadArgs.RepositoryID,
