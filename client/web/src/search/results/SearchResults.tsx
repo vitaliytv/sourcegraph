@@ -1,7 +1,7 @@
 import * as H from 'history'
 import { isEqual } from 'lodash'
 import * as React from 'react'
-import { concat, Observable, Subject, Subscription } from 'rxjs'
+import { concat, from, Observable, Subject, Subscription } from 'rxjs'
 import { catchError, distinctUntilChanged, filter, map, startWith, switchMap, tap } from 'rxjs/operators'
 import {
     parseSearchURLQuery,
@@ -12,6 +12,7 @@ import {
     resolveVersionContext,
     MutableVersionContextProps,
     ParsedSearchQueryProps,
+    SearchContextProps,
 } from '..'
 import { Contributions, Evaluated } from '../../../../shared/src/api/protocol'
 import { FetchFileParameters } from '../../../../shared/src/components/CodeExcerpt'
@@ -38,9 +39,10 @@ import { SearchPatternType } from '../../../../shared/src/graphql-operations'
 import { shouldDisplayPerformanceWarning } from '../backend'
 import { VersionContextWarning } from './VersionContextWarning'
 import { CodeMonitoringProps } from '../../enterprise/code-monitoring'
+import { wrapRemoteObservable } from '../../../../shared/src/api/client/api/common'
 
 export interface SearchResultsProps
-    extends ExtensionsControllerProps<'executeCommand' | 'extHostAPI' | 'services'>,
+    extends ExtensionsControllerProps<'executeCommand' | 'extHostAPI'>,
         PlatformContextProps<'forceUpdateTooltip' | 'settings'>,
         SettingsCascadeProps,
         TelemetryProps,
@@ -49,7 +51,8 @@ export interface SearchResultsProps
         PatternTypeProps,
         CaseSensitivityProps,
         MutableVersionContextProps,
-        Pick<CodeMonitoringProps, 'enableCodeMonitoring'> {
+        Pick<CodeMonitoringProps, 'enableCodeMonitoring'>,
+        Pick<SearchContextProps, 'selectedSearchContextSpec'> {
     authenticatedUser: AuthenticatedUser | null
     location: H.Location
     history: H.History
@@ -121,7 +124,8 @@ export class SearchResults extends React.Component<SearchResultsProps, SearchRes
                     query,
                     SearchPatternType.regexp,
                     this.props.caseSensitive,
-                    this.props.versionContext
+                    this.props.versionContext,
+                    this.props.selectedSearchContextSpec
                 )
             this.props.history.replace(newLocation)
         }
@@ -132,7 +136,11 @@ export class SearchResults extends React.Component<SearchResultsProps, SearchRes
             this.componentUpdates
                 .pipe(
                     startWith(this.props),
-                    map(props => parseSearchURL(props.location.search, { appendCaseFilter: true })),
+                    map(props =>
+                        parseSearchURL(props.location.search, {
+                            appendCaseFilter: true,
+                        })
+                    ),
                     // Search when a new search query was specified in the URL
                     distinctUntilChanged((a, b) => isEqual(a, b)),
                     filter(
@@ -198,7 +206,12 @@ export class SearchResults extends React.Component<SearchResultsProps, SearchRes
                                                 this.props.setCaseSensitivity(caseSensitive)
                                             }
 
-                                            this.props.setVersionContext(versionContext)
+                                            this.props.setVersionContext(versionContext).catch(error => {
+                                                console.error(
+                                                    'Error sending initial versionContext to extensions',
+                                                    error
+                                                )
+                                            })
                                         },
                                         error => {
                                             this.props.telemetryService.log('SearchResultsFetchFailed', {
@@ -251,8 +264,8 @@ export class SearchResults extends React.Component<SearchResultsProps, SearchRes
         )
 
         this.subscriptions.add(
-            this.props.extensionsController.services.contribution
-                .getContributions()
+            from(this.props.extensionsController.extHostAPI)
+                .pipe(switchMap(extensionHostAPI => wrapRemoteObservable(extensionHostAPI.getContributions())))
                 .subscribe(contributions => this.setState({ contributions }))
         )
     }

@@ -3,22 +3,19 @@ import * as H from 'history'
 import RegexIcon from 'mdi-react/RegexIcon'
 import classNames from 'classnames'
 import FormatLetterCaseIcon from 'mdi-react/FormatLetterCaseIcon'
-import {
-    PatternTypeProps,
-    CaseSensitivityProps,
-    CopyQueryButtonProps,
-    SearchContextProps,
-    isContextFilterInQuery,
-} from '../..'
+import { PatternTypeProps, CaseSensitivityProps, CopyQueryButtonProps, SearchContextProps } from '../..'
 import { SettingsCascadeProps } from '../../../../../shared/src/settings/settings'
 import { submitSearch } from '../../helpers'
 import { QueryInputToggle } from './QueryInputToggle'
 import { isErrorLike } from '../../../../../shared/src/util/errors'
 import CodeBracketsIcon from 'mdi-react/CodeBracketsIcon'
 import { CopyQueryButton } from './CopyQueryButton'
-import { VersionContextProps } from '../../../../../shared/src/search/util'
 import { SearchPatternType } from '../../../graphql-operations'
+import { VersionContextProps } from '../../../../../shared/src/search/util'
+import { appendContextFilter } from '../../../../../shared/src/search/query/transformer'
 import { findFilter, FilterKind } from '../../../../../shared/src/search/query/validate'
+import { KEYBOARD_SHORTCUT_COPY_FULL_QUERY } from '../../../keyboardShortcuts/keyboardShortcuts'
+import { isMacPlatform } from '../../../util'
 
 export interface TogglesProps
     extends PatternTypeProps,
@@ -39,15 +36,12 @@ export const getFullQuery = (
     searchContextSpec: string,
     caseSensitive: boolean,
     patternType: SearchPatternType
-): string =>
-    [
-        searchContextSpec && !isContextFilterInQuery(query) ? `context:${searchContextSpec}` : '',
-        query,
-        `patternType:${patternType}`,
-        caseSensitive ? 'case:yes' : '',
-    ]
+): string => {
+    const finalQuery = [query, `patternType:${patternType}`, caseSensitive ? 'case:yes' : '']
         .filter(queryPart => !!queryPart)
         .join(' ')
+    return appendContextFilter(finalQuery, searchContextSpec)
+}
 
 /**
  * The toggles displayed in the query input.
@@ -65,7 +59,6 @@ export const Toggles: React.FunctionComponent<TogglesProps> = (props: TogglesPro
         settingsCascade,
         className,
         copyQueryButton,
-        showSearchContext,
         selectedSearchContextSpec,
     } = props
 
@@ -91,10 +84,19 @@ export const Toggles: React.FunctionComponent<TogglesProps> = (props: TogglesPro
                     caseSensitive: newCaseSensitive,
                     versionContext,
                     activation,
+                    selectedSearchContextSpec,
                 })
             }
         },
-        [caseSensitive, hasGlobalQueryBehavior, history, navbarSearchQuery, patternType, versionContext]
+        [
+            caseSensitive,
+            hasGlobalQueryBehavior,
+            history,
+            navbarSearchQuery,
+            patternType,
+            versionContext,
+            selectedSearchContextSpec,
+        ]
     )
 
     const toggleCaseSensitivity = useCallback((): void => {
@@ -126,12 +128,7 @@ export const Toggles: React.FunctionComponent<TogglesProps> = (props: TogglesPro
         submitOnToggle({ newPatternType })
     }, [patternType, setPatternType, settingsCascade.final, submitOnToggle])
 
-    const fullQuery = getFullQuery(
-        navbarSearchQuery,
-        showSearchContext ? selectedSearchContextSpec : '',
-        caseSensitive,
-        patternType
-    )
+    const fullQuery = getFullQuery(navbarSearchQuery, selectedSearchContextSpec || '', caseSensitive, patternType)
 
     return (
         <div className={classNames('toggle-container', className)}>
@@ -197,6 +194,8 @@ export const Toggles: React.FunctionComponent<TogglesProps> = (props: TogglesPro
                     <div className="toggle-container__separator" />
                     <CopyQueryButton
                         fullQuery={fullQuery}
+                        keyboardShortcutForFullCopy={KEYBOARD_SHORTCUT_COPY_FULL_QUERY}
+                        isMacPlatform={isMacPlatform}
                         className="toggle-container__toggle toggle-container__copy-query-button"
                     />
                 </>

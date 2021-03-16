@@ -78,6 +78,7 @@ func TestStatusMessages(t *testing.T) {
 		user            *types.User
 		// maps repoName to external service id
 		repoOwner map[api.RepoName]int64
+		cloud     bool
 		err       string
 	}{
 		{
@@ -99,6 +100,15 @@ func TestStatusMessages(t *testing.T) {
 					},
 				},
 			},
+		},
+		{
+			// We don't show uncloned count in Cloud as it is misleading
+			name:            "nothing cloned cloud",
+			stored:          []*types.Repo{{Name: "foobar"}},
+			user:            admin,
+			gitserverCloned: []string{},
+			res:             nil,
+			cloud:           true,
 		},
 		{
 			name:            "subset cloned",
@@ -169,7 +179,7 @@ func TestStatusMessages(t *testing.T) {
 			res: []StatusMessage{
 				{
 					ExternalServiceSyncError: &ExternalServiceSyncError{
-						Message:           "fetching from code host: 1 error occurred:\n\t* github is down\n\n",
+						Message:           "fetching from code host github.com - site: 1 error occurred:\n\t* github is down\n\n",
 						ExternalServiceId: siteLevelService.ID,
 					},
 				},
@@ -282,7 +292,7 @@ func TestStatusMessages(t *testing.T) {
 				tc.err = "<nil>"
 			}
 
-			res, err := FetchStatusMessages(ctx, db, tc.user)
+			res, err := FetchStatusMessages(ctx, db, tc.user, tc.cloud)
 			if have, want := fmt.Sprint(err), tc.err; have != want {
 				t.Errorf("have err: %q, want: %q", have, want)
 			}

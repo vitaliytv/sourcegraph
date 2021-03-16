@@ -304,7 +304,7 @@ func testServerSetRepoEnabled(t *testing.T, store *repos.Store) func(t *testing.
 						tmp := &types.Repo{
 							ID:           k.repo.ID,
 							ExternalRepo: k.repo.ExternalRepo,
-							Name:         api.RepoName(k.repo.Name),
+							Name:         k.repo.Name,
 							Private:      k.repo.Private,
 							URI:          k.repo.URI,
 							Description:  k.repo.Description,
@@ -860,7 +860,7 @@ func testRepoLookup(db *sql.DB) func(t *testing.T, repoStore *repos.Store) func(
 						Repo: api.RepoName("github.com/foo/bar"),
 					},
 					githubDotComSource: &fakeRepoSource{
-						err: github.ErrNotFound,
+						err: github.ErrRepoNotFound,
 					},
 					result: &protocol.RepoLookupResult{ErrorNotFound: true},
 					err:    fmt.Sprintf("repository not found (name=%s notfound=%v)", api.RepoName("github.com/foo/bar"), true),
@@ -957,7 +957,7 @@ func testRepoLookup(db *sql.DB) func(t *testing.T, repoStore *repos.Store) func(
 				{
 					name: "Private repos are not supported on sourcegraph.com",
 					args: protocol.RepoLookupArgs{
-						Repo: api.RepoName(githubRepository.Name),
+						Repo: githubRepository.Name,
 					},
 					githubDotComSource: &fakeRepoSource{
 						repo: githubRepository.With(func(r *types.Repo) {
@@ -965,15 +965,15 @@ func testRepoLookup(db *sql.DB) func(t *testing.T, repoStore *repos.Store) func(
 						}),
 					},
 					result: &protocol.RepoLookupResult{ErrorNotFound: true},
-					err:    fmt.Sprintf("repository not found (name=%s notfound=%v)", api.RepoName(githubRepository.Name), true),
+					err:    fmt.Sprintf("repository not found (name=%s notfound=%v)", githubRepository.Name, true),
 				},
 				{
 					name: "Private repos that used to be public should be removed asynchronously",
 					args: protocol.RepoLookupArgs{
-						Repo: api.RepoName(githubRepository.Name),
+						Repo: githubRepository.Name,
 					},
 					githubDotComSource: &fakeRepoSource{
-						err: github.ErrNotFound,
+						err: github.ErrRepoNotFound,
 					},
 					stored: []*types.Repo{githubRepository},
 					result: &protocol.RepoLookupResult{Repo: &protocol.RepoInfo{

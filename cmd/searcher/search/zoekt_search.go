@@ -13,12 +13,14 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"github.com/sourcegraph/sourcegraph/internal/actor"
 	"github.com/sourcegraph/sourcegraph/internal/api"
 	"github.com/sourcegraph/sourcegraph/internal/comby"
 
 	zoektquery "github.com/google/zoekt/query"
 	zoektrpc "github.com/google/zoekt/rpc"
 	"github.com/opentracing/opentracing-go/log"
+
 	"github.com/sourcegraph/sourcegraph/internal/search"
 	"github.com/sourcegraph/sourcegraph/internal/search/backend"
 	zoektutil "github.com/sourcegraph/sourcegraph/internal/search/zoekt"
@@ -29,11 +31,11 @@ import (
 
 var zoektOnce sync.Once
 var endpointMap atomicEndpoints
-var zoektClient backend.StreamSearcher
+var zoektClient zoekt.Streamer
 
-func getZoektClient(indexerEndpoints []string) backend.StreamSearcher {
+func getZoektClient(indexerEndpoints []string) zoekt.Streamer {
 	zoektOnce.Do(func() {
-		dial := func(endpoint string) backend.StreamSearcher {
+		dial := func(endpoint string) zoekt.Streamer {
 			return backend.NewMeteredSearcher(endpoint, &backend.StreamSearchAdapter{zoektrpc.Client(endpoint)})
 		}
 		zoektClient = backend.NewMeteredSearcher(
@@ -117,16 +119,6 @@ type zoektSearchStreamEvent struct {
 	limitHit bool
 	partial  map[api.RepoID]struct{}
 	err      error
-}
-
-func zoektSearchStream(ctx context.Context, args *search.TextPatternInfo, repoBranches map[string][]string, since func(t time.Time) time.Duration, endpoints []string, useFullDeadline bool) <-chan zoektSearchStreamEvent {
-	c := make(chan zoektSearchStreamEvent)
-	go func() {
-		defer close(c)
-		_, _, _, _ = zoektSearch(ctx, args, repoBranches, since, endpoints, useFullDeadline, c)
-	}()
-
-	return c
 }
 
 const defaultMaxSearchResults = 30
@@ -241,7 +233,7 @@ func zoektSearch(ctx context.Context, args *search.TextPatternInfo, repoBranches
 
 func writeZip(ctx context.Context, w io.Writer, fileMatches []zoekt.FileMatch) (err error) {
 	bytesWritten := 0
-	span, ctx := ot.StartSpanFromContext(ctx, "WriteZip")
+	span, _ := ot.StartSpanFromContext(ctx, "WriteZip")
 	defer func() {
 		span.LogFields(log.Int("bytes_written", bytesWritten))
 		span.Finish()
@@ -275,6 +267,9 @@ func contextWithoutDeadline(cOld context.Context) (context.Context, context.Canc
 
 	// Set trace context so we still get spans propagated
 	cNew = trace.CopyContext(cNew, cOld)
+
+	// Copy actor from cOld to cNew.
+	cNew = actor.WithActor(cNew, actor.FromContext(cOld))
 
 	go func() {
 		select {

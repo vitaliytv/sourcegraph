@@ -7,7 +7,7 @@ import { Observable } from 'rxjs'
 import { IRepository, IFile, ISymbol, ILanguage, IRepoGroup, ISearchContext } from '../../graphql/schema'
 import { SearchSuggestion } from '../suggestions'
 import { isDefined } from '../../util/types'
-import { FilterType, isNegatableFilter, resolveFilter, FILTERS } from './filters'
+import { FilterType, isNegatableFilter, resolveFilter, FILTERS, escapeSpaces } from './filters'
 import { first } from 'rxjs/operators'
 import { SymbolKind } from '../../graphql-operations'
 
@@ -43,6 +43,7 @@ const FILTER_TYPE_COMPLETIONS: Omit<Monaco.languages.CompletionItem, 'range'>[] 
                 {
                     ...completionItem,
                     label: `-${label}`,
+                    insertText: `-${label}:`,
                     filterText: `-${label}`,
                     detail: FILTERS[filterType].description(true),
                 },
@@ -67,6 +68,7 @@ const repositoryToCompletion = (
     options: { isFilterValue: boolean; globbing: boolean }
 ): PartialCompletionItem => {
     let insertText = options.globbing ? name : `^${escapeRegExp(name)}$`
+    insertText = escapeSpaces(insertText)
     insertText = (options.isFilterValue ? insertText : `${FilterType.repo}:${insertText}`) + ' '
     return {
         label: name,
@@ -82,6 +84,7 @@ const fileToCompletion = (
     options: { isFilterValue: boolean; globbing: boolean }
 ): PartialCompletionItem => {
     let insertText = options.globbing ? path : `^${escapeRegExp(path)}$`
+    insertText = escapeSpaces(insertText)
     insertText = (options.isFilterValue ? insertText : `${FilterType.file}:${insertText}`) + ' '
     return {
         label: name,
@@ -298,7 +301,7 @@ export async function getCompletionItems(
                         // Set the current value as filterText, so that all dynamic suggestions
                         // returned by the server are displayed. otherwise, if the current filter value
                         // is a regex pattern, Monaco's filtering might hide some suggestions.
-                        filterText: value && (value?.type === 'literal' ? value.value : value.quotedValue),
+                        filterText: value?.value,
                         range: value ? toMonacoRange(value.range) : defaultRange,
                         command: COMPLETION_ITEM_SELECTED,
                     })),
@@ -306,7 +309,7 @@ export async function getCompletionItems(
         }
         if (resolvedFilter.definition.discreteValues) {
             return {
-                suggestions: resolvedFilter.definition.discreteValues.map(
+                suggestions: resolvedFilter.definition.discreteValues(token.value).map(
                     (label, index): Monaco.languages.CompletionItem => ({
                         label,
                         sortText: index.toString(), // suggestions sort by order in the list, not alphabetically.

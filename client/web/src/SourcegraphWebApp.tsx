@@ -6,7 +6,7 @@ import * as React from 'react'
 import { hot } from 'react-hot-loader/root'
 import { Route } from 'react-router'
 import { BrowserRouter } from 'react-router-dom'
-import { combineLatest, from, Subscription, fromEvent, of } from 'rxjs'
+import { combineLatest, from, Subscription, fromEvent, of, Subject } from 'rxjs'
 import { bufferCount, startWith, switchMap } from 'rxjs/operators'
 import { setLinkComponent } from '../../shared/src/components/Link'
 import {
@@ -57,7 +57,6 @@ import { KeyboardShortcutsProps } from './keyboardShortcuts/keyboardShortcuts'
 import { QueryState } from './search/helpers'
 import { RepoSettingsAreaRoute } from './repo/settings/RepoSettingsArea'
 import { RepoSettingsSideBarGroup } from './repo/settings/RepoSettingsSidebar'
-import { NotificationType } from '../../shared/src/api/client/services/notifications'
 import { VersionContext } from './schema/site.schema'
 import { globbingEnabledFromSettings } from './util/globbing'
 import {
@@ -79,6 +78,8 @@ import {
 import { aggregateStreamingSearch } from './search/stream'
 import { ISearchContext } from '../../shared/src/graphql/schema'
 import { logCodeInsightsChanges } from './insights/analytics'
+import { listUserRepositories } from './site-admin/backend'
+import { NotificationType } from '../../shared/src/api/extension/extensionHostApi'
 
 export interface SourcegraphWebAppProps extends KeyboardShortcutsProps {
     extensionAreaRoutes: readonly ExtensionAreaRoute[]
@@ -100,7 +101,7 @@ export interface SourcegraphWebAppProps extends KeyboardShortcutsProps {
     repoSettingsAreaRoutes: readonly RepoSettingsAreaRoute[]
     repoSettingsSidebarGroups: readonly RepoSettingsSideBarGroup[]
     routes: readonly LayoutRouteProps<any>[]
-    showCampaigns: boolean
+    showBatchChanges: boolean
 }
 
 interface SourcegraphWebAppState extends SettingsCascadeProps {
@@ -169,8 +170,9 @@ interface SourcegraphWebAppState extends SettingsCascadeProps {
 
     showSearchContext: boolean
     availableSearchContexts: ISearchContext[]
-    selectedSearchContextSpec: string
+    selectedSearchContextSpec?: string
     defaultSearchContextSpec: string
+    hasUserAddedRepositories: boolean
 
     /**
      * Whether globbing is enabled for filters.
@@ -208,6 +210,7 @@ const notificationClassNames = {
 
 const LIGHT_THEME_LOCAL_STORAGE_KEY = 'light-theme'
 const LAST_VERSION_CONTEXT_KEY = 'sg-last-version-context'
+const LAST_SEARCH_CONTEXT_KEY = 'sg-last-search-context'
 
 /** Reads the stored theme preference from localStorage */
 const readStoredThemePreference = (): ThemePreference => {
@@ -237,6 +240,7 @@ const LayoutWithActivation = window.context.sourcegraphDotComMode ? Layout : wit
  */
 class ColdSourcegraphWebApp extends React.Component<SourcegraphWebAppProps, SourcegraphWebAppState> {
     private readonly subscriptions = new Subscription()
+    private readonly userRepositoriesUpdates = new Subject<void>()
     private readonly darkThemeMediaList = window.matchMedia('(prefers-color-scheme: dark)')
     private readonly platformContext: PlatformContext = createPlatformContext()
     private readonly extensionsController: ExtensionsController = createExtensionsController(this.platformContext)
@@ -277,6 +281,7 @@ class ColdSourcegraphWebApp extends React.Component<SourcegraphWebAppProps, Sour
             availableSearchContexts: [],
             selectedSearchContextSpec: 'global',
             defaultSearchContextSpec: 'global', // global is default for now, user will be able to change this at some point
+            hasUserAddedRepositories: false,
             showEnterpriseHomePanels: false,
             globbing: false,
             showMultilineSearchConsole: false,
@@ -336,6 +341,33 @@ class ColdSourcegraphWebApp extends React.Component<SourcegraphWebAppProps, Sour
             })
         )
 
+        this.subscriptions.add(
+            combineLatest([this.userRepositoriesUpdates, authenticatedUser])
+                .pipe(
+                    switchMap(([, authenticatedUser]) =>
+                        authenticatedUser ? listUserRepositories({ id: authenticatedUser.id, first: 1 }) : of(null)
+                    )
+                )
+                .subscribe(userRepositories => {
+                    const hasUserAddedRepositories = userRepositories !== null && userRepositories.nodes.length > 0
+                    this.setState({ hasUserAddedRepositories })
+                })
+        )
+
+        this.subscriptions.add(
+            authenticatedUser.subscribe(authenticatedUser => {
+                if (authenticatedUser === null) {
+                    return
+                }
+                const previousSearchContextSpec = localStorage.getItem(LAST_SEARCH_CONTEXT_KEY)
+                const context = `@${authenticatedUser.username}`
+                this.setState({
+                    defaultSearchContextSpec: context,
+                    selectedSearchContextSpec: previousSearchContextSpec || context,
+                })
+            })
+        )
+
         /**
          * Listens for uncaught 401 errors when a user when a user was previously authenticated.
          *
@@ -357,7 +389,11 @@ class ColdSourcegraphWebApp extends React.Component<SourcegraphWebAppProps, Sour
         )
 
         // Send initial versionContext to extensions
-        this.extensionsController.services.workspace.versionContext.next(this.state.versionContext)
+        this.setVersionContext(this.state.versionContext).catch(error => {
+            console.error('Error sending initial version context to extensions', error)
+        })
+
+        this.userRepositoriesUpdates.next()
     }
 
     public componentWillUnmount(): void {
@@ -417,7 +453,7 @@ class ColdSourcegraphWebApp extends React.Component<SourcegraphWebAppProps, Sour
                                     authenticatedUser={authenticatedUser}
                                     viewerSubject={this.state.viewerSubject}
                                     settingsCascade={this.state.settingsCascade}
-                                    showCampaigns={this.props.showCampaigns}
+                                    showBatchChanges={this.props.showBatchChanges}
                                     // Theme
                                     isLightTheme={this.isLightTheme()}
                                     themePreference={this.state.themePreference}
@@ -445,8 +481,8 @@ class ColdSourcegraphWebApp extends React.Component<SourcegraphWebAppProps, Sour
                                     isSourcegraphDotCom={window.context.sourcegraphDotComMode}
                                     showRepogroupHomepage={this.state.showRepogroupHomepage}
                                     showOnboardingTour={this.state.showOnboardingTour}
-                                    showSearchContext={this.state.showSearchContext}
-                                    selectedSearchContextSpec={this.state.selectedSearchContextSpec}
+                                    showSearchContext={this.canShowSearchContext()}
+                                    selectedSearchContextSpec={this.getSelectedSearchContextSpec()}
                                     setSelectedSearchContextSpec={this.setSelectedSearchContextSpec}
                                     availableSearchContexts={this.state.availableSearchContexts}
                                     defaultSearchContextSpec={this.state.defaultSearchContextSpec}
@@ -466,6 +502,7 @@ class ColdSourcegraphWebApp extends React.Component<SourcegraphWebAppProps, Sour
                                     deleteCodeMonitor={deleteCodeMonitor}
                                     toggleCodeMonitorEnabled={toggleCodeMonitorEnabled}
                                     streamSearch={aggregateStreamingSearch}
+                                    onUserRepositoriesUpdate={this.onUserRepositoriesUpdate}
                                 />
                             )}
                         />
@@ -506,7 +543,7 @@ class ColdSourcegraphWebApp extends React.Component<SourcegraphWebAppProps, Sour
         })
     }
 
-    private setVersionContext = (versionContext: string | undefined): void => {
+    private setVersionContext = async (versionContext: string | undefined): Promise<void> => {
         const resolvedVersionContext = resolveVersionContext(versionContext, this.state.availableVersionContexts)
         if (!resolvedVersionContext) {
             localStorage.removeItem(LAST_VERSION_CONTEXT_KEY)
@@ -516,17 +553,31 @@ class ColdSourcegraphWebApp extends React.Component<SourcegraphWebAppProps, Sour
             this.setState({ versionContext: resolvedVersionContext, previousVersionContext: resolvedVersionContext })
         }
 
-        this.extensionsController.services.workspace.versionContext.next(resolvedVersionContext)
+        const extensionHostAPI = await this.extensionsController.extHostAPI
+        // Note: `setVersionContext` is now asynchronous since the version context
+        // is sent directly to extensions in the worker thread. This means that when the Promise
+        // is in a fulfilled state, we know that extensions have received the latest version context
+        await extensionHostAPI.setVersionContext(resolvedVersionContext)
     }
 
+    private onUserRepositoriesUpdate = (userRepoCount: number): void => {
+        this.setState({ hasUserAddedRepositories: userRepoCount > 0 })
+    }
+
+    private canShowSearchContext = (): boolean => this.state.showSearchContext && this.state.hasUserAddedRepositories
+
+    private getSelectedSearchContextSpec = (): string | undefined =>
+        this.canShowSearchContext() ? this.state.selectedSearchContextSpec : undefined
+
     private setSelectedSearchContextSpec = (spec: string): void => {
-        this.setState(state => ({
-            selectedSearchContextSpec: resolveSearchContextSpec(
-                spec,
-                state.availableSearchContexts,
-                state.defaultSearchContextSpec
-            ),
-        }))
+        const { availableSearchContexts, defaultSearchContextSpec } = this.state
+        const resolvedSearchContextSpec = resolveSearchContextSpec(
+            spec,
+            availableSearchContexts,
+            defaultSearchContextSpec
+        )
+        this.setState({ selectedSearchContextSpec: resolvedSearchContextSpec })
+        localStorage.setItem(LAST_SEARCH_CONTEXT_KEY, resolvedSearchContextSpec)
     }
 }
 

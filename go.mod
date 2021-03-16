@@ -1,6 +1,6 @@
 module github.com/sourcegraph/sourcegraph
 
-go 1.15
+go 1.16
 
 require (
 	cloud.google.com/go v0.76.0
@@ -10,7 +10,6 @@ require (
 	github.com/NYTimes/gziphandler v1.1.1
 	github.com/OneOfOne/xxhash v1.2.8 // indirect
 	github.com/RoaringBitmap/roaring v0.5.1
-	github.com/alecthomas/units v0.0.0-20210208195552-ff826a37aa15 // indirect
 	github.com/anmitsu/go-shlex v0.0.0-20200514113438-38f4b401e2be // indirect
 	github.com/aphistic/sweet-junit v0.2.0 // indirect
 	github.com/asaskevich/govalidator v0.0.0-20200907205600-7a23bdc65eef // indirect
@@ -30,17 +29,16 @@ require (
 	github.com/dave/jennifer v1.4.1 // indirect
 	github.com/davecgh/go-spew v1.1.1
 	github.com/daviddengcn/go-colortext v1.0.0
+	github.com/derision-test/glock v0.0.0-20210316032053-f5b74334bb29
 	github.com/dghubble/gologin v2.2.0+incompatible
 	github.com/dgraph-io/ristretto v0.0.3
 	github.com/dgryski/go-farm v0.0.0-20200201041132-a6ae2369ad13 // indirect
 	github.com/dineshappavoo/basex v0.0.0-20170425072625-481a6f6dc663
 	github.com/dnaeon/go-vcr v1.0.1
-	github.com/efritz/glock v0.0.0-20181228234553-f184d69dff2c
 	github.com/efritz/go-genlib v0.0.0-20200616012750-c21aae2e13ac // indirect
 	github.com/efritz/go-mockgen v0.0.0-20200916004441-cfcabc111002
 	github.com/efritz/pentimento v0.0.0-20190429011147-ade47d831101
 	github.com/evanphx/json-patch v4.9.0+incompatible // indirect
-	github.com/fatih/astrewrite v0.0.0-20191207154002-9094e544fcef
 	github.com/fatih/color v1.9.0
 	github.com/fatih/structs v1.1.0
 	github.com/felixge/fgprof v0.9.1
@@ -66,7 +64,7 @@ require (
 	github.com/golang/groupcache v0.0.0-20200121045136-8c9f03a8e57e
 	github.com/gomodule/oauth1 v0.0.0-20181215000758-9a59ed3b0a84
 	github.com/gomodule/redigo v2.0.0+incompatible
-	github.com/google/go-cmp v0.5.4
+	github.com/google/go-cmp v0.5.5
 	github.com/google/go-github v17.0.0+incompatible
 	github.com/google/go-github/v28 v28.1.1
 	github.com/google/go-github/v31 v31.0.0
@@ -86,7 +84,7 @@ require (
 	github.com/gosimple/slug v1.9.0 // indirect
 	github.com/goware/urlx v0.3.1
 	github.com/grafana-tools/sdk v0.0.0-20210121201358-e16eca879125
-	github.com/graph-gophers/graphql-go v0.0.0-20200819123640-3b5ddcd884ae
+	github.com/graph-gophers/graphql-go v0.0.0-20201113091052-beb923fada29
 	github.com/graphql-go/graphql v0.7.9
 	github.com/gregjones/httpcache v0.0.0-20190611155906-901d90724c79
 	github.com/hashicorp/go-hclog v0.14.1 // indirect
@@ -114,7 +112,6 @@ require (
 	github.com/machinebox/graphql v0.2.2
 	github.com/mailru/easyjson v0.7.6 // indirect
 	github.com/matryer/is v1.4.0 // indirect
-	github.com/mattn/go-colorable v0.1.7 // indirect
 	github.com/mattn/go-sqlite3 v2.0.3+incompatible
 	github.com/mcuadros/go-version v0.0.0-20190830083331-035f6764e8d2
 	github.com/mgutz/ansi v0.0.0-20200706080929-d51e80ef957d // indirect
@@ -152,8 +149,7 @@ require (
 	github.com/shurcooL/octicon v0.0.0-20191102190552-cbb32d6a785c // indirect
 	github.com/shurcooL/vfsgen v0.0.0-20200824052919-0d455de96546
 	github.com/sourcegraph/annotate v0.0.0-20160123013949-f4cad6c6324d // indirect
-	github.com/sourcegraph/campaignutils v0.0.0-20201124155628-5d86cf20398d
-	github.com/sourcegraph/codeintelutils v0.0.0-20200824140252-1db3aed5cf58
+	github.com/sourcegraph/batch-change-utils v0.0.0-20210309183117-206c057cc03e
 	github.com/sourcegraph/ctxvfs v0.0.0-20180418081416-2b65f1b1ea81
 	github.com/sourcegraph/go-ctags v0.0.0-20201109224903-0e02e034fdb1
 	github.com/sourcegraph/go-diff v0.6.1
@@ -162,13 +158,15 @@ require (
 	github.com/sourcegraph/go-lsp v0.0.0-20200429204803-219e11d77f5d
 	github.com/sourcegraph/gosyntect v0.0.0-20200429204402-842ed26129d0
 	github.com/sourcegraph/jsonx v0.0.0-20200629203448-1a936bd500cf
-	github.com/sourcegraph/lsif-protocol v1.0.0
 	github.com/sourcegraph/sourcegraph/enterprise/dev/ci/images v0.0.0-00010101000000-000000000000
+	github.com/sourcegraph/sourcegraph/enterprise/lib v0.0.0-00010101000000-000000000000
+	github.com/sourcegraph/sourcegraph/lib v0.0.0-00010101000000-000000000000
 	github.com/sourcegraph/syntaxhighlight v0.0.0-20170531221838-bd320f5d308e // indirect
 	github.com/spaolacci/murmur3 v1.1.0 // indirect
 	github.com/stretchr/objx v0.3.0 // indirect
 	github.com/stripe/stripe-go v70.15.0+incompatible
 	github.com/temoto/robotstxt v1.1.1
+	github.com/throttled/throttled/v2 v2.7.1
 	github.com/tidwall/gjson v1.6.1
 	github.com/tinylib/msgp v1.1.2 // indirect
 	github.com/tomnomnom/linkheader v0.0.0-20180905144013-02ca5825eb80
@@ -185,12 +183,10 @@ require (
 	go.uber.org/atomic v1.7.0
 	go.uber.org/automaxprocs v1.3.0
 	golang.org/x/crypto v0.0.0-20200820211705-5c72a883971a
-	golang.org/x/mod v0.4.1 // indirect
 	golang.org/x/net v0.0.0-20210119194325-5f4716e94777
 	golang.org/x/oauth2 v0.0.0-20210210192628-66670185b0cd
 	golang.org/x/sync v0.0.0-20201207232520-09787c993a3a
 	golang.org/x/sys v0.0.0-20210124154548-22da62e12c0c
-	golang.org/x/text v0.3.5 // indirect
 	golang.org/x/time v0.0.0-20200630173020-3af7569d3a1e
 	golang.org/x/tools v0.1.0
 	google.golang.org/api v0.39.0
@@ -200,7 +196,6 @@ require (
 	gopkg.in/square/go-jose.v2 v2.5.1 // indirect
 	gopkg.in/src-d/go-git.v4 v4.13.1
 	gopkg.in/yaml.v2 v2.4.0
-	honnef.co/go/tools v0.0.1-2020.1.5 // indirect
 	k8s.io/api v0.17.0
 	k8s.io/apimachinery v0.17.0
 	k8s.io/client-go v0.17.0
@@ -214,13 +209,19 @@ require (
 // or intentional forks.
 replace (
 	// We maintain our own fork of Zoekt. Update with ./dev/zoekt/update
-	github.com/google/zoekt => github.com/sourcegraph/zoekt v0.0.0-20210216134814-a58c3d2968a6
+	github.com/google/zoekt => github.com/sourcegraph/zoekt v0.0.0-20210309123010-cafbecb72244
 	// We use a fork of Alertmanager to allow prom-wrapper to better manipulate Alertmanager configuration.
 	// See https://docs.sourcegraph.com/dev/background-information/observability/prometheus
 	github.com/prometheus/alertmanager => github.com/sourcegraph/alertmanager v0.21.1-0.20200727091526-3e856a90b534
 	// We publish 'enterprise/dev/ci/images' as a package for import in other tooling.
 	// When developing Sourcegraph itself, this replace uses the local package instead of a pushed version.
 	github.com/sourcegraph/sourcegraph/enterprise/dev/ci/images => ./enterprise/dev/ci/images
+	// We publish 'enterprise/lib' as a package for import in other tooling.
+	// When developing Sourcegraph itself, this replace uses the local package instead of a pushed version.
+	github.com/sourcegraph/sourcegraph/enterprise/lib => ./enterprise/lib
+	// We publish 'lib' as a package for import in other tooling.
+	// When developing Sourcegraph itself, this replace uses the local package instead of a pushed version.
+	github.com/sourcegraph/sourcegraph/lib => ./lib
 )
 
 // Temporary replace directives
@@ -230,9 +231,6 @@ replace (
 replace (
 	// Pending: https://github.com/ghodss/yaml/pull/65
 	github.com/ghodss/yaml => github.com/sourcegraph/yaml v1.0.1-0.20200714132230-56936252f152
-	// We need our fork until https://github.com/graph-gophers/graphql-go/pull/400 is merged upstream
-	// Our change limits the number of goroutines spawned by resolvers which was causing memory spikes on our frontend
-	github.com/graph-gophers/graphql-go => github.com/sourcegraph/graphql-go v0.0.0-20201007040903-ec61a5417d66
 	github.com/shurcooL/httpgzip => github.com/sourcegraph/httpgzip v0.0.0-20210213125624-48ebf036a6a1
 )
 

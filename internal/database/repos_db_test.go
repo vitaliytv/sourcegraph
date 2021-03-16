@@ -10,11 +10,13 @@ import (
 	"time"
 
 	"github.com/google/go-cmp/cmp"
+	"k8s.io/apimachinery/pkg/util/rand"
 
 	"github.com/sourcegraph/sourcegraph/internal/actor"
 	"github.com/sourcegraph/sourcegraph/internal/api"
 	"github.com/sourcegraph/sourcegraph/internal/conf"
 	"github.com/sourcegraph/sourcegraph/internal/database/dbtesting"
+	"github.com/sourcegraph/sourcegraph/internal/database/dbutil"
 	"github.com/sourcegraph/sourcegraph/internal/database/query"
 	"github.com/sourcegraph/sourcegraph/internal/extsvc"
 	"github.com/sourcegraph/sourcegraph/internal/extsvc/github"
@@ -1785,6 +1787,139 @@ func TestRepos_ListRepoNames_externalServiceID(t *testing.T) {
 	}
 }
 
+// This function tests for both individual uses of ExternalRepoIncludePrefixes,
+// ExternalRepoExcludePrefixes as well as combination of these two options.
+func TestRepos_ListRepoNames_externalRepoPrefixes(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+
+	db := dbtesting.GetDB(t)
+	ctx := actor.WithInternalActor(context.Background())
+
+	confGet := func() *conf.Unified {
+		return &conf.Unified{}
+	}
+
+	svc := &types.ExternalService{
+		Kind:        extsvc.KindPerforce,
+		DisplayName: "Perforce - Test",
+		Config:      `{"p4.port": "ssl:111.222.333.444:1666", "p4.user": "admin", "p4.passwd": "pa$$word", "repositoryPathPattern": "perforce/{depot}"}`,
+	}
+	if err := ExternalServices(db).Create(ctx, confGet, svc); err != nil {
+		t.Fatal(err)
+	}
+
+	repos := types.Repos{
+		{
+			Name:    api.RepoName("perforce/Marketing"),
+			URI:     "Marketing",
+			Private: true,
+			ExternalRepo: api.ExternalRepoSpec{
+				ID:          "//Marketing/",
+				ServiceType: extsvc.TypePerforce,
+				ServiceID:   "ssl:111.222.333.444:1666",
+			},
+		},
+		{
+			Name:    api.RepoName("perforce/Engineering"),
+			URI:     "Engineering",
+			Private: true,
+			ExternalRepo: api.ExternalRepoSpec{
+				ID:          "//Engineering/",
+				ServiceType: extsvc.TypePerforce,
+				ServiceID:   "ssl:111.222.333.444:1666",
+			},
+		},
+		{
+			Name:    api.RepoName("perforce/Engineering/Frontend"),
+			URI:     "Engineering/Frontend",
+			Private: true,
+			ExternalRepo: api.ExternalRepoSpec{
+				ID:          "//Engineering/Frontend/",
+				ServiceType: extsvc.TypePerforce,
+				ServiceID:   "ssl:111.222.333.444:1666",
+			},
+		},
+		{
+			Name:    api.RepoName("perforce/Engineering/Backend"),
+			URI:     "Engineering/Backend",
+			Private: true,
+			ExternalRepo: api.ExternalRepoSpec{
+				ID:          "//Engineering/Backend/",
+				ServiceType: extsvc.TypePerforce,
+				ServiceID:   "ssl:111.222.333.444:1666",
+			},
+		},
+	}
+	if err := Repos(db).Create(ctx, repos...); err != nil {
+		t.Fatal(err)
+	}
+
+	tests := []struct {
+		name string
+		opt  ReposListOptions
+		want []*types.RepoName
+	}{
+		{
+			name: "only apply ExternalRepoIncludePrefixes",
+			opt: ReposListOptions{
+				ExternalRepoIncludePrefixes: []api.ExternalRepoSpec{
+					{
+						ID:          "//Engineering/",
+						ServiceType: extsvc.TypePerforce,
+						ServiceID:   "ssl:111.222.333.444:1666",
+					},
+				},
+			},
+			want: repoNamesFromRepos(repos[1:]),
+		},
+		{
+			name: "only apply ExternalRepoExcludePrefixes",
+			opt: ReposListOptions{
+				ExternalRepoExcludePrefixes: []api.ExternalRepoSpec{
+					{
+						ID:          "//Engineering/",
+						ServiceType: extsvc.TypePerforce,
+						ServiceID:   "ssl:111.222.333.444:1666",
+					},
+				},
+			},
+			want: repoNamesFromRepos(repos[:1]),
+		},
+		{
+			name: "apply both ExternalRepoIncludePrefixes and ExternalRepoExcludePrefixes",
+			opt: ReposListOptions{
+				ExternalRepoIncludePrefixes: []api.ExternalRepoSpec{
+					{
+						ID:          "//Engineering/",
+						ServiceType: extsvc.TypePerforce,
+						ServiceID:   "ssl:111.222.333.444:1666",
+					},
+				},
+				ExternalRepoExcludePrefixes: []api.ExternalRepoSpec{
+					{
+						ID:          "//Engineering/Backend/",
+						ServiceType: extsvc.TypePerforce,
+						ServiceID:   "ssl:111.222.333.444:1666",
+					},
+				},
+			},
+			want: repoNamesFromRepos(repos[1:3]),
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			repos, err := Repos(db).ListRepoNames(ctx, test.opt)
+			if err != nil {
+				t.Fatal(err)
+			}
+			assertJSONEqual(t, test.want, repos)
+		})
+	}
+}
+
 func TestRepos_createRepo_dupe(t *testing.T) {
 	if testing.Short() {
 		t.Skip()
@@ -1798,4 +1933,111 @@ func TestRepos_createRepo_dupe(t *testing.T) {
 
 	// Add another repo with the same name.
 	createRepo(ctx, t, db, &types.Repo{Name: "a/b"})
+}
+
+func TestRepos_ListRepos_UserPublicRepos(t *testing.T) {
+	if testing.Short() {
+		t.Skip()
+	}
+
+	db := dbtesting.GetDB(t)
+	ctx := actor.WithInternalActor(context.Background())
+
+	user, repo := initUserAndRepo(t, ctx, db)
+	// create a repo we don't own
+	_, otherRepo := initUserAndRepo(t, ctx, db)
+
+	// register our interest in the other user's repo
+	err := UserPublicRepos(db).SetUserRepo(ctx, UserPublicRepo{UserID: user.ID, RepoURI: otherRepo.URI, RepoID: otherRepo.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	want := []*types.RepoName{
+		{ID: repo.ID, Name: repo.Name},
+	}
+
+	have, err := Repos(db).ListRepoNames(ctx, ReposListOptions{UserID: user.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if diff := cmp.Diff(have, want); diff != "" {
+		t.Fatalf(diff)
+	}
+
+	want = []*types.RepoName{
+		{ID: repo.ID, Name: repo.Name},
+		{ID: otherRepo.ID, Name: otherRepo.Name},
+	}
+
+	have, err = Repos(db).ListRepoNames(ctx, ReposListOptions{UserID: user.ID, IncludeUserPublicRepos: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if diff := cmp.Diff(have, want); diff != "" {
+		t.Fatalf(diff)
+	}
+}
+
+func initUserAndRepo(t *testing.T, ctx context.Context, db dbutil.DB) (*types.User, *types.Repo) {
+	id := rand.String(3)
+	user, err := Users(db).Create(ctx, NewUser{
+		Email:                 id + "@example.com",
+		Username:              "u" + id,
+		Password:              "p",
+		EmailVerificationCode: "c",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx = actor.WithActor(ctx, &actor.Actor{
+		UID: user.ID,
+	})
+
+	now := time.Now()
+
+	// Create an external service
+	service := types.ExternalService{
+		Kind:            extsvc.KindGitHub,
+		DisplayName:     "Github - Test",
+		Config:          `{"url": "https://github.com", "repositoryQuery": ["none"], "token": "abc", "authorization": {}}`,
+		CreatedAt:       now,
+		UpdatedAt:       now,
+		NamespaceUserID: user.ID,
+	}
+	confGet := func() *conf.Unified {
+		return &conf.Unified{}
+	}
+	err = ExternalServices(db).Create(ctx, confGet, &service)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	repo := &types.Repo{
+		ExternalRepo: api.ExternalRepoSpec{
+			ID:          "r" + id,
+			ServiceType: extsvc.TypeGitHub,
+			ServiceID:   "https://github.com",
+		},
+		Name:        api.RepoName("github.com/sourcegraph/" + rand.String(10)),
+		Private:     false,
+		URI:         "uri",
+		Description: "description",
+		CreatedAt:   now,
+		UpdatedAt:   now,
+		Metadata:    new(github.Repository),
+		Sources: map[string]*types.SourceInfo{
+			service.URN(): {
+				ID:       service.URN(),
+				CloneURL: "git@github.com:foo/bar.git",
+			},
+		},
+	}
+	err = Repos(db).Create(ctx, repo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return user, repo
 }

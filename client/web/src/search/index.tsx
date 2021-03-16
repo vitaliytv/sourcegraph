@@ -1,6 +1,6 @@
 import { escapeRegExp } from 'lodash'
 import { replaceRange } from '../../../shared/src/util/strings'
-import { discreteValueAliases, FilterType } from '../../../shared/src/search/query/filters'
+import { discreteValueAliases, escapeSpaces } from '../../../shared/src/search/query/filters'
 import { VersionContext } from '../schema/site.schema'
 import { SearchPatternType } from '../../../shared/src/graphql-operations'
 import { Observable } from 'rxjs'
@@ -9,7 +9,6 @@ import { EventLogResult } from './backend'
 import { AggregateStreamingSearchResults, StreamSearchOptions } from './stream'
 import { findFilter, FilterKind } from '../../../shared/src/search/query/validate'
 import { VersionContextProps } from '../../../shared/src/search/util'
-import { scanSearchQuery } from '../../../shared/src/search/query/scanner'
 
 /**
  * Parses the query out of the URL search params (the 'q' parameter). In non-interactive mode, if the 'q' parameter is not present, it
@@ -120,9 +119,9 @@ export function parseSearchURL(
 
 export function repoFilterForRepoRevision(repoName: string, globbing: boolean, revision?: string): string {
     if (globbing) {
-        return `${quoteIfNeeded(`${repoName}${revision ? `@${abbreviateOID(revision)}` : ''}`)}`
+        return `${escapeSpaces(`${repoName}${revision ? `@${abbreviateOID(revision)}` : ''}`)}`
     }
-    return `${quoteIfNeeded(`^${escapeRegExp(repoName)}$${revision ? `@${abbreviateOID(revision)}` : ''}`)}`
+    return `${escapeSpaces(`^${escapeRegExp(repoName)}$${revision ? `@${abbreviateOID(revision)}` : ''}`)}`
 }
 
 export function searchQueryForRepoRevision(repoName: string, globbing: boolean, revision?: string): string {
@@ -159,7 +158,7 @@ export interface CaseSensitivityProps {
 }
 
 export interface MutableVersionContextProps extends VersionContextProps {
-    setVersionContext: (versionContext: string | undefined) => void
+    setVersionContext: (versionContext: string | undefined) => Promise<void>
     availableVersionContexts: VersionContext[] | undefined
     previousVersionContext: string | null
 }
@@ -180,7 +179,7 @@ export interface SearchContextProps {
     showSearchContext: boolean
     availableSearchContexts: ISearchContext[]
     defaultSearchContextSpec: string
-    selectedSearchContextSpec: string
+    selectedSearchContextSpec?: string
     setSelectedSearchContextSpec: (spec: string) => void
 }
 
@@ -230,24 +229,14 @@ export function resolveVersionContext(
     return versionContext
 }
 
+export function isSearchContextSpecAvailable(spec: string, availableSearchContexts: ISearchContext[]): boolean {
+    return availableSearchContexts.map(item => item.spec).includes(spec)
+}
+
 export function resolveSearchContextSpec(
     spec: string,
     availableSearchContexts: ISearchContext[],
     defaultSpec: string
 ): string {
-    if (availableSearchContexts.map(item => item.spec).includes(spec)) {
-        return spec
-    }
-
-    return defaultSpec
-}
-
-export function isContextFilterInQuery(query: string): boolean {
-    const scannedQuery = scanSearchQuery(query)
-    return (
-        scannedQuery.type === 'success' &&
-        scannedQuery.term.some(
-            token => token.type === 'filter' && token.field.value.toLowerCase() === FilterType.context
-        )
-    )
+    return isSearchContextSpecAvailable(spec, availableSearchContexts) ? spec : defaultSpec
 }

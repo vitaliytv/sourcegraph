@@ -14,7 +14,6 @@ import (
 	"github.com/aws/aws-sdk-go/aws/awserr"
 	"github.com/aws/aws-sdk-go/service/s3/s3manager"
 	"github.com/inconshreveable/log15"
-	"github.com/sourcegraph/codeintelutils"
 
 	"github.com/sourcegraph/sourcegraph/cmd/frontend/backend"
 	store "github.com/sourcegraph/sourcegraph/enterprise/internal/codeintel/stores/dbstore"
@@ -26,6 +25,7 @@ import (
 	"github.com/sourcegraph/sourcegraph/internal/lazyregexp"
 	"github.com/sourcegraph/sourcegraph/internal/types"
 	"github.com/sourcegraph/sourcegraph/internal/vcs"
+	codeintelutils "github.com/sourcegraph/sourcegraph/lib/codeintel/utils"
 )
 
 type UploadHandler struct {

@@ -46,7 +46,7 @@ const defaultProps: SearchResultsListProps = {
         subjects: null,
         final: null,
     },
-    extensionsController: { executeCommand: sinon.spy(), services: extensionsController.services },
+    extensionsController: { ...extensionsController, executeCommand: sinon.spy() },
     platformContext: { forceUpdateTooltip: sinon.spy(), settings: NEVER },
     telemetryService: NOOP_TELEMETRY_SERVICE,
     parsedSearchQuery: 'r:golang/oauth2 test f:travis',
@@ -56,6 +56,7 @@ const defaultProps: SearchResultsListProps = {
     setCaseSensitivity: sinon.spy(),
 
     versionContext: undefined,
+    selectedSearchContextSpec: 'global',
 
     navbarSearchQueryState: { query: '' },
 

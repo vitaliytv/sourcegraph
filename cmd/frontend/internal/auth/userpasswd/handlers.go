@@ -12,15 +12,16 @@ import (
 
 	"github.com/sourcegraph/sourcegraph/cmd/frontend/auth"
 	"github.com/sourcegraph/sourcegraph/cmd/frontend/backend"
+	"github.com/sourcegraph/sourcegraph/cmd/frontend/hubspot"
+	"github.com/sourcegraph/sourcegraph/cmd/frontend/hubspot/hubspotutil"
 	"github.com/sourcegraph/sourcegraph/cmd/frontend/internal/session"
 	"github.com/sourcegraph/sourcegraph/cmd/frontend/internal/suspiciousnames"
 	"github.com/sourcegraph/sourcegraph/internal/actor"
 	"github.com/sourcegraph/sourcegraph/internal/authz"
 	"github.com/sourcegraph/sourcegraph/internal/conf"
 	"github.com/sourcegraph/sourcegraph/internal/database"
+	"github.com/sourcegraph/sourcegraph/internal/database/dbutil"
 	"github.com/sourcegraph/sourcegraph/internal/errcode"
-	"github.com/sourcegraph/sourcegraph/internal/hubspot"
-	"github.com/sourcegraph/sourcegraph/internal/hubspot/hubspotutil"
 	"github.com/sourcegraph/sourcegraph/internal/types"
 )
 
@@ -244,26 +245,28 @@ func HandleSignIn(w http.ResponseWriter, r *http.Request) {
 }
 
 // Check availability of username for signup form
-func HandleCheckUsernameTaken(w http.ResponseWriter, r *http.Request) {
-	vars := mux.Vars(r)
-	username, err := auth.NormalizeUsername(vars["username"])
+func HandleCheckUsernameTaken(db dbutil.DB) func(w http.ResponseWriter, r *http.Request) {
+	return func(w http.ResponseWriter, r *http.Request) {
+		vars := mux.Vars(r)
+		username, err := auth.NormalizeUsername(vars["username"])
 
-	if err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		return
-	}
+		if err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
 
-	_, err = database.GlobalNamespaces.GetByName(r.Context(), username)
-	if err == database.ErrNamespaceNotFound {
-		w.WriteHeader(http.StatusNotFound)
-		return
-	}
-	if err != nil {
-		httpLogAndError(w, "Error checking username uniqueness", http.StatusInternalServerError, "err", err)
-		return
-	}
+		_, err = database.Namespaces(db).GetByName(r.Context(), username)
+		if err == database.ErrNamespaceNotFound {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		if err != nil {
+			httpLogAndError(w, "Error checking username uniqueness", http.StatusInternalServerError, "err", err)
+			return
+		}
 
-	w.WriteHeader(http.StatusOK)
+		w.WriteHeader(http.StatusOK)
+	}
 }
 
 func httpLogAndError(w http.ResponseWriter, msg string, code int, errArgs ...interface{}) {
