@@ -73,28 +73,16 @@ func (h *UploadHandler) handleEnqueue(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	payload, uploadID, err := h.handleEnqueueErr(w, r, repositoryID)
+	payload, err := h.handleEnqueueErr(w, r, repositoryID)
 	if err != nil {
 		if cerr, ok := err.(*ClientError); ok {
 			http.Error(w, cerr.Error(), http.StatusBadRequest)
-
-			if uploadID != -1 {
-				reason := "client misbehaving:\n* " + cerr.Error()
-				_ = h.dbStore.MarkFailed(ctx, uploadID, reason)
-			}
 			return
 		}
 
 		if err == codeintelutils.ErrMetadataExceedsBuffer {
 			http.Error(w, "Could not read indexer name from metaData vertex. Please supply it explicitly.", http.StatusBadRequest)
 			return
-		}
-
-		// if upload was S3/GCS/Minio related, make it a _bit_ nicer in the UI
-		var awsErr awserr.Error
-		if errors.As(err, &awsErr) {
-			reason := "object store error:\n* " + formatAWSError(awsErr)
-			_ = h.dbStore.MarkFailed(ctx, uploadID, reason)
 		}
 
 		log15.Error("Failed to enqueue payload", "error", err)
@@ -143,7 +131,7 @@ type enqueuePayload struct {
 //   - handleEnqueueMultipartSetup
 //   - handleEnqueueMultipartUpload
 //   - handleEnqueueMultipartFinalize
-func (h *UploadHandler) handleEnqueueErr(w http.ResponseWriter, r *http.Request, repositoryID int) (payload interface{}, uploadID int, err error) {
+func (h *UploadHandler) handleEnqueueErr(w http.ResponseWriter, r *http.Request, repositoryID int) (payload interface{}, err error) {
 	uploadArgs := UploadArgs{
 		Commit:            getQuery(r, "commit"),
 		Root:              sanitizeRoot(getQuery(r, "root")),
@@ -158,27 +146,27 @@ func (h *UploadHandler) handleEnqueueErr(w http.ResponseWriter, r *http.Request,
 
 	if hasQuery(r, "multiPart") {
 		if numParts := getQueryInt(r, "numParts"); numParts <= 0 {
-			return nil, -1, clientError("illegal number of parts: %d", numParts)
+			return nil, clientError("illegal number of parts: %d", numParts)
 		} else {
 			return h.handleEnqueueMultipartSetup(r, uploadArgs, numParts)
 		}
 	}
 
 	if !hasQuery(r, "uploadId") {
-		return nil, -1, clientError("no uploadId supplied")
+		return nil, clientError("no uploadId supplied")
 	}
 
 	upload, exists, err := h.dbStore.GetUploadByID(r.Context(), getQueryInt(r, "uploadId"))
 	if err != nil {
-		return nil, -1, err
+		return nil, err
 	}
 	if !exists {
-		return nil, -1, clientError("upload not found")
+		return nil, clientError("upload not found")
 	}
 
 	if hasQuery(r, "index") {
 		if partIndex := getQueryInt(r, "index"); partIndex < 0 || partIndex >= upload.NumParts {
-			return nil, upload.ID, clientError("illegal part index: index %d is outside the range [0, %d)", partIndex, upload.NumParts)
+			return nil, clientError("illegal part index: index %d is outside the range [0, %d)", partIndex, upload.NumParts)
 		} else {
 			return h.handleEnqueueMultipartUpload(r, upload, partIndex)
 		}
@@ -188,45 +176,26 @@ func (h *UploadHandler) handleEnqueueErr(w http.ResponseWriter, r *http.Request,
 		return h.handleEnqueueMultipartFinalize(r, upload)
 	}
 
-	return nil, -1, clientError("no index supplied")
+	return nil, clientError("no index supplied")
 }
 
 // handleEnqueueSinglePayload handles a non-multipart upload. This creates an upload record
 // with state 'queued', proxies the data to the bundle manager, and returns the generated ID.
-func (h *UploadHandler) handleEnqueueSinglePayload(r *http.Request, uploadArgs UploadArgs) (interface{}, int, error) {
-	ctx := r.Context()
-
-	// Newer versions of src-cli will do this same check before uploading the file. However,
-	// older versions of src-cli will not guarantee that the index name query parameter is
-	// sent. Requiring it now will break valid workflows. We only need ot maintain backwards
-	// compatibility on single-payload uploads, as everything else is as new as the version
-	// of src-cli that always sends the indexer name.
+func (h *UploadHandler) handleEnqueueSinglePayload(r *http.Request, uploadArgs UploadArgs) (interface{}, error) {
 	if uploadArgs.Indexer == "" {
-		// Tee all reads from the body into a buffer so that we don't destructively consume
-		// any data from the body payload.
-		var buf bytes.Buffer
-		teeReader := io.TeeReader(r.Body, &buf)
-
-		gzipReader, err := gzip.NewReader(teeReader)
+		indexer, err := inferIndexer(r)
 		if err != nil {
-			return nil, -1, err
+			return nil, err
 		}
 
-		name, err := codeintelutils.ReadIndexerName(gzipReader)
-		if err != nil {
-			return nil, -1, err
-		}
-		uploadArgs.Indexer = name
-
-		// Replace the body of the request with a reader that will produce all of the same
-		// content: all of the data that was already read from r.Body, plus the remaining
-		// content from r.Body.
-		r.Body = ioutil.NopCloser(io.MultiReader(bytes.NewReader(buf.Bytes()), r.Body))
+		uploadArgs.Indexer = indexer
 	}
+
+	ctx := r.Context()
 
 	tx, err := h.dbStore.Transact(ctx)
 	if err != nil {
-		return nil, -1, err
+		return nil, err
 	}
 	defer func() {
 		err = tx.Done(err)
@@ -243,16 +212,16 @@ func (h *UploadHandler) handleEnqueueSinglePayload(r *http.Request, uploadArgs U
 		UploadedParts:     []int{0},
 	})
 	if err != nil {
-		return nil, -1, err
+		return nil, err
 	}
 
 	size, err := h.uploadStore.Upload(ctx, fmt.Sprintf("upload-%d.lsif.gz", id), r.Body)
 	if err != nil {
-		return nil, id, err
+		return nil, err
 	}
 
 	if err := tx.MarkQueued(ctx, id, &size); err != nil {
-		return nil, id, err
+		return nil, err
 	}
 
 	log15.Info(
@@ -263,16 +232,14 @@ func (h *UploadHandler) handleEnqueueSinglePayload(r *http.Request, uploadArgs U
 	)
 
 	// older versions of src-cli expect a string
-	return enqueuePayload{strconv.Itoa(id)}, id, nil
+	return enqueuePayload{strconv.Itoa(id)}, nil
 }
 
 // handleEnqueueMultipartSetup handles the first request in a multipart upload. This creates a
 // new upload record with state 'uploading' and returns the generated ID to be used in subsequent
 // requests for the same upload.
-func (h *UploadHandler) handleEnqueueMultipartSetup(r *http.Request, uploadArgs UploadArgs, numParts int) (interface{}, int, error) {
-	ctx := r.Context()
-
-	id, err := h.dbStore.InsertUpload(ctx, store.Upload{
+func (h *UploadHandler) handleEnqueueMultipartSetup(r *http.Request, uploadArgs UploadArgs, numParts int) (interface{}, error) {
+	id, err := h.dbStore.InsertUpload(r.Context(), store.Upload{
 		Commit:            uploadArgs.Commit,
 		Root:              uploadArgs.Root,
 		RepositoryID:      uploadArgs.RepositoryID,
@@ -283,7 +250,7 @@ func (h *UploadHandler) handleEnqueueMultipartSetup(r *http.Request, uploadArgs 
 		UploadedParts:     nil,
 	})
 	if err != nil {
-		return nil, -1, err
+		return nil, err
 	}
 
 	log15.Info(
@@ -294,45 +261,46 @@ func (h *UploadHandler) handleEnqueueMultipartSetup(r *http.Request, uploadArgs 
 	)
 
 	// older versions of src-cli expect a string
-	return enqueuePayload{strconv.Itoa(id)}, id, nil
+	return enqueuePayload{strconv.Itoa(id)}, nil
 }
 
 // handleEnqueueMultipartUpload handles a partial upload in a multipart upload. This proxies the
 // data to the bundle manager and marks the part index in the upload record.
-func (h *UploadHandler) handleEnqueueMultipartUpload(r *http.Request, upload store.Upload, partIndex int) (interface{}, int, error) {
+func (h *UploadHandler) handleEnqueueMultipartUpload(r *http.Request, upload store.Upload, partIndex int) (interface{}, error) {
 	ctx := r.Context()
 
 	tx, err := h.dbStore.Transact(ctx)
 	if err != nil {
-		return nil, upload.ID, err
+		return nil, err
 	}
 	defer func() {
 		err = tx.Done(err)
 	}()
 
 	if err := tx.AddUploadPart(ctx, upload.ID, partIndex); err != nil {
-		return nil, upload.ID, err
+		return nil, err
 	}
 	if _, err := h.uploadStore.Upload(ctx, fmt.Sprintf("upload-%d.%d.lsif.gz", upload.ID, partIndex), r.Body); err != nil {
-		return nil, upload.ID, err
+		h.markUploadAsFailed(context.Background(), upload.ID, err)
+		return nil, err
 	}
 
-	return nil, upload.ID, nil
+	return nil, nil
 }
 
 // handleEnqueueMultipartFinalize handles the final request of a multipart upload. This transitions the
 // upload from 'uploading' to 'queued', then instructs the bundle manager to concatenate all of the part
 // files together.
-func (h *UploadHandler) handleEnqueueMultipartFinalize(r *http.Request, upload store.Upload) (interface{}, int, error) {
+func (h *UploadHandler) handleEnqueueMultipartFinalize(r *http.Request, upload store.Upload) (interface{}, error) {
 	ctx := r.Context()
 
 	if len(upload.UploadedParts) != upload.NumParts {
-		return nil, upload.ID, clientError("upload is missing %d parts", upload.NumParts-len(upload.UploadedParts))
+		return nil, clientError("upload is missing %d parts", upload.NumParts-len(upload.UploadedParts))
 	}
 
 	tx, err := h.dbStore.Transact(ctx)
 	if err != nil {
-		return nil, upload.ID, err
+		return nil, err
 	}
 	defer func() {
 		err = tx.Done(err)
@@ -345,14 +313,50 @@ func (h *UploadHandler) handleEnqueueMultipartFinalize(r *http.Request, upload s
 
 	size, err := h.uploadStore.Compose(ctx, fmt.Sprintf("upload-%d.lsif.gz", upload.ID), sources...)
 	if err != nil {
-		return nil, upload.ID, err
+		h.markUploadAsFailed(context.Background(), upload.ID, err)
+		return nil, err
 	}
 
 	if err := tx.MarkQueued(ctx, upload.ID, &size); err != nil {
-		return nil, upload.ID, err
+		return nil, err
 	}
 
-	return nil, upload.ID, nil
+	return nil, nil
+}
+
+// inferIndexer returns the tool name from the metadata vertex at the start of the the given
+// input stream. This method must destructively read the request body, but will re-assign the
+// Body field with a reader that holds the same information as the original request.
+//
+// Newer versions of src-cli will do this same check before uploading the file. However, older
+// versions of src-cli will not guarantee that the index name query parameter is sent. Requiring
+// it now will break valid workflows. We only need ot maintain backwards compatibility on single
+// payload uploads, as everything else is as new as the version of src-cli that always sends the
+// indexer name.
+func inferIndexer(r *http.Request) (string, error) {
+	// Tee all reads from the body into a buffer so that we don't destructively consume
+	// any data from the body payload.
+	var buf bytes.Buffer
+	teeReader := io.TeeReader(r.Body, &buf)
+
+	gzipReader, err := gzip.NewReader(teeReader)
+	if err != nil {
+		return "", err
+	}
+
+	// Read from the stream until we extract a tool name. This method is careful not to
+	// take too much resident memory in the case of a malformed bundle.
+	name, err := codeintelutils.ReadIndexerName(gzipReader)
+	if err != nil {
+		return "", err
+	}
+
+	// Replace the body of the request with a reader that will produce all of the same
+	// content: all of the data that was already read from r.Body, plus the remaining
+	// content from r.Body.
+	r.Body = ioutil.NopCloser(io.MultiReader(bytes.NewReader(buf.Bytes()), r.Body))
+
+	return name, nil
 }
 
 func ensureRepoAndCommitExist(ctx context.Context, w http.ResponseWriter, repoName, commit string) (*types.Repo, bool) {
@@ -383,4 +387,27 @@ func ensureRepoAndCommitExist(ctx context.Context, w http.ResponseWriter, repoNa
 	}
 
 	return repo, true
+}
+
+// markUploadAsFailed attempts to mark the given upload as failed, extracting a human-meaningful
+// error message from the given error. We assume this method to whenever an error occurs when
+// interacting with the upload store so that the status of the upload is accurately reflected in
+// the UI.
+func (h *UploadHandler) markUploadAsFailed(ctx context.Context, uploadID int, err error) {
+	var (
+		message string
+		awsErr  awserr.Error
+	)
+
+	if _, ok := err.(*ClientError); ok {
+		message = "client misbehaving"
+	} else if errors.As(err, &awsErr) {
+		message = "object store error"
+	} else {
+		return
+	}
+
+	if markErr := h.dbStore.MarkFailed(ctx, uploadID, fmt.Sprintf("%s:\n* %s", message, err.Error())); markErr != nil {
+		log15.Error("Failed to mark upload as failed", "error", markErr)
+	}
 }
