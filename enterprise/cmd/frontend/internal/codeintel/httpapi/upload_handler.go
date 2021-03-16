@@ -328,6 +328,32 @@ func (h *UploadHandler) handleEnqueueMultipartFinalize(r *http.Request, upload s
 	return nil, nil
 }
 
+// markUploadAsFailed attempts to mark the given upload as failed, extracting a human-meaningful
+// error message from the given error. We assume this method to whenever an error occurs when
+// interacting with the upload store so that the status of the upload is accurately reflected in
+// the UI.
+//
+// This method does not return an error as it's best-effort cleanup. If an error occurs when
+// trying to modify the record, it will be logged but will not be directly visible to the user.
+func (h *UploadHandler) markUploadAsFailed(ctx context.Context, uploadID int, err error) {
+	var (
+		message string
+		awsErr  awserr.Error
+	)
+
+	if _, ok := err.(*ClientError); ok {
+		message = fmt.Sprintf("client misbehaving:\n* %s", err)
+	} else if errors.As(err, &awsErr) {
+		message = fmt.Sprintf("object store error:\n* %s", formatAWSError(awsErr))
+	} else {
+		return
+	}
+
+	if markErr := h.dbStore.MarkFailed(ctx, uploadID, message); markErr != nil {
+		log15.Error("Failed to mark upload as failed", "error", markErr)
+	}
+}
+
 // inferIndexer returns the tool name from the metadata vertex at the start of the the given
 // input stream. This method must destructively read the request body, but will re-assign the
 // Body field with a reader that holds the same information as the original request.
@@ -391,29 +417,6 @@ func ensureRepoAndCommitExist(ctx context.Context, w http.ResponseWriter, repoNa
 	}
 
 	return repo, true
-}
-
-// markUploadAsFailed attempts to mark the given upload as failed, extracting a human-meaningful
-// error message from the given error. We assume this method to whenever an error occurs when
-// interacting with the upload store so that the status of the upload is accurately reflected in
-// the UI.
-func (h *UploadHandler) markUploadAsFailed(ctx context.Context, uploadID int, err error) {
-	var (
-		message string
-		awsErr  awserr.Error
-	)
-
-	if _, ok := err.(*ClientError); ok {
-		message = fmt.Sprintf("client misbehaving:\n* %s", err)
-	} else if errors.As(err, &awsErr) {
-		message = fmt.Sprintf("object store error:\n* %s", formatAWSError(awsErr))
-	} else {
-		return
-	}
-
-	if markErr := h.dbStore.MarkFailed(ctx, uploadID, message); markErr != nil {
-		log15.Error("Failed to mark upload as failed", "error", markErr)
-	}
 }
 
 func formatAWSError(err awserr.Error) string {
