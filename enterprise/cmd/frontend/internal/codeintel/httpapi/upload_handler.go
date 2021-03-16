@@ -131,7 +131,7 @@ type enqueuePayload struct {
 //   - handleEnqueueMultipartSetup
 //   - handleEnqueueMultipartUpload
 //   - handleEnqueueMultipartFinalize
-func (h *UploadHandler) handleEnqueueErr(w http.ResponseWriter, r *http.Request, repositoryID int) (payload interface{}, err error) {
+func (h *UploadHandler) handleEnqueueErr(w http.ResponseWriter, r *http.Request, repositoryID int) (interface{}, error) {
 	ctx := r.Context()
 
 	uploadArgs := UploadArgs{
@@ -191,7 +191,6 @@ func (h *UploadHandler) handleEnqueueSinglePayload(r *http.Request, uploadArgs U
 		if err != nil {
 			return nil, err
 		}
-
 		uploadArgs.Indexer = indexer
 	}
 
