@@ -336,20 +336,17 @@ func (h *UploadHandler) handleEnqueueMultipartFinalize(r *http.Request, upload s
 // This method does not return an error as it's best-effort cleanup. If an error occurs when
 // trying to modify the record, it will be logged but will not be directly visible to the user.
 func (h *UploadHandler) markUploadAsFailed(ctx context.Context, uploadID int, err error) {
-	var (
-		message string
-		awsErr  awserr.Error
-	)
+	var reason string
 
 	if _, ok := err.(*ClientError); ok {
-		message = fmt.Sprintf("client misbehaving:\n* %s", err)
-	} else if errors.As(err, &awsErr) {
-		message = fmt.Sprintf("object store error:\n* %s", formatAWSError(awsErr))
+		reason = fmt.Sprintf("client misbehaving:\n* %s", err)
+	} else if awsErr := formatAWSError(err); awsErr != "" {
+		reason = fmt.Sprintf("object store error:\n* %s", awsErr)
 	} else {
 		return
 	}
 
-	if markErr := h.dbStore.MarkFailed(ctx, uploadID, message); markErr != nil {
+	if markErr := h.dbStore.MarkFailed(ctx, uploadID, reason); markErr != nil {
 		log15.Error("Failed to mark upload as failed", "error", markErr)
 	}
 }
@@ -419,15 +416,26 @@ func ensureRepoAndCommitExist(ctx context.Context, w http.ResponseWriter, repoNa
 	return repo, true
 }
 
-func formatAWSError(err awserr.Error) string {
-	var s3Err s3manager.MultiUploadFailure
-	if errors.As(err, &s3Err) {
-		if s3Err.OrigErr() != nil {
-			return s3Err.OrigErr().Error()
-		}
-
-		return s3Err.Error()
+// formatAWSError returns the unwrapped, root AWS/S3 error. This method returns
+// an empty string when the given error value is neither an AWS nor an S3 error.
+func formatAWSError(err error) string {
+	var awsErr awserr.Error
+	if !errors.As(err, &awsErr) {
+		// Not an AWS error
+		return ""
 	}
 
-	return err.Message()
+	var s3Err s3manager.MultiUploadFailure
+	if !errors.As(awsErr, &s3Err) {
+		// Regular AWS error
+		return awsErr.Message()
+	}
+
+	if s3Err.OrigErr() != nil {
+		// Wrapped S3 error
+		return s3Err.OrigErr().Error()
+	}
+
+	// Regular S3 error
+	return s3Err.Error()
 }
