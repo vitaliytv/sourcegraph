@@ -132,6 +132,8 @@ type enqueuePayload struct {
 //   - handleEnqueueMultipartUpload
 //   - handleEnqueueMultipartFinalize
 func (h *UploadHandler) handleEnqueueErr(w http.ResponseWriter, r *http.Request, repositoryID int) (payload interface{}, err error) {
+	ctx := r.Context()
+
 	uploadArgs := UploadArgs{
 		Commit:            getQuery(r, "commit"),
 		Root:              sanitizeRoot(getQuery(r, "root")),
@@ -156,7 +158,7 @@ func (h *UploadHandler) handleEnqueueErr(w http.ResponseWriter, r *http.Request,
 		return nil, clientError("no uploadId supplied")
 	}
 
-	upload, exists, err := h.dbStore.GetUploadByID(r.Context(), getQueryInt(r, "uploadId"))
+	upload, exists, err := h.dbStore.GetUploadByID(ctx, getQueryInt(r, "uploadId"))
 	if err != nil {
 		return nil, err
 	}
