@@ -2,6 +2,7 @@ import { Filter, Literal } from './token'
 import { SearchSuggestion } from '../suggestions'
 import { Omit } from 'utility-types'
 import { selectorCompletion } from './selectFilter'
+import { predicateCompletion } from './predicates'
 
 export enum FilterType {
     after = 'after',
@@ -226,6 +227,7 @@ export const FILTERS: Record<NegatableFilter, NegatableFilterDefinition> &
     [FilterType.repo]: {
         alias: 'r',
         negatable: true,
+        discreteValues: value => predicateCompletion('repo', value),
         description: negated =>
             `${negated ? 'Exclude' : 'Include only'} results from repositories matching the given search pattern.`,
         suggestions: 'Repository',
