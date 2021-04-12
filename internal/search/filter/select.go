@@ -26,7 +26,10 @@ func (sp SelectPath) String() string {
 }
 
 var validSelectors = map[SelectType]map[string]interface{}{
-	Commit:     {},
+	Commit: {
+		"added":   struct{}{},
+		"removed": struct{}{},
+	},
 	Content:    {},
 	File:       {},
 	Repository: {},

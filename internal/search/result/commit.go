@@ -1,6 +1,7 @@
 package result
 
 import (
+	"github.com/inconshreveable/log15"
 	"github.com/sourcegraph/sourcegraph/internal/search/filter"
 	"github.com/sourcegraph/sourcegraph/internal/types"
 	"github.com/sourcegraph/sourcegraph/internal/vcs/git"
@@ -41,6 +42,7 @@ func (r *CommitMatch) Limit(limit int) int {
 }
 
 func (r *CommitMatch) Select(path filter.SelectPath) Match {
+	log15.Info("wtf", "wtf", "wtf")
 	switch path.Type {
 	case filter.Repository:
 		return &RepoMatch{
@@ -48,9 +50,23 @@ func (r *CommitMatch) Select(path filter.SelectPath) Match {
 			ID:   r.RepoName.ID,
 		}
 	case filter.Commit:
+		log15.Info("c", "commit", "filter")
+		if len(path.Fields) > 0 {
+			filteredCommit := SelectCommitKind(r, path.Fields[0])
+			if filteredCommit == nil {
+				return nil
+			}
+			return r
+		}
 		return r
 	}
 	return nil
 }
 
 func (r *CommitMatch) searchResultMarker() {}
+
+func SelectCommitKind(c *CommitMatch, field string) Match {
+	log15.Info("body", "b", c.Body)
+	log15.Info("diff", "d", c.DiffPreview)
+	return nil
+}

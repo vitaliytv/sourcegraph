@@ -11,6 +11,7 @@ import (
 	"sync"
 	"unicode/utf8"
 
+	"github.com/inconshreveable/log15"
 	otlog "github.com/opentracing/opentracing-go/log"
 	"github.com/xeonx/timeago"
 	"golang.org/x/sync/errgroup"
@@ -46,9 +47,68 @@ func (r *CommitSearchResultResolver) Select(path filter.SelectPath) SearchResult
 	case filter.Repository:
 		return r.Commit().Repository()
 	case filter.Commit:
+		if len(path.Fields) > 0 {
+			filteredCommit := SelectCommitKind(r, path.Fields[0])
+			if filteredCommit == nil {
+				return nil
+			}
+			return r
+		}
 		return r
 	}
 	return nil
+}
+
+func SelectCommitKind(c *CommitSearchResultResolver, field string) SearchResultResolver {
+	if d := c.DiffPreview(); d != nil {
+		var added []string
+		for _, line := range strings.Split(d.inner.Value, "\n") {
+			if strings.HasPrefix(line, "+") {
+				// log15.Info("added", "line", line)
+				added = append(added, line)
+			}
+		}
+		if len(added) > 0 {
+			/*
+				c.DiffPreview = func(*CommitSearchResultResolver) *highlightedStringResolver {
+					return &highlightedStringResolver{
+						inner: result.HighlightedString{
+							Value:      strings.Join(added, "\n"),
+							Highlights: d.inner.Highlights,
+						},
+					}
+				}
+			*/
+			log15.Info("modified", "m", "m")
+			return &CommitSearchResultResolver{
+				CommitMatch: result.CommitMatch{
+					Commit:     c.CommitMatch.Commit,
+					RepoName:   c.CommitMatch.RepoName,
+					Refs:       c.CommitMatch.Refs,
+					SourceRefs: c.CommitMatch.SourceRefs,
+					// MessagePreview: c.CommitMatch.MessagePreview,
+					MessagePreview: &result.HighlightedString{},
+					DiffPreview:    &result.HighlightedString{
+						// Value:      strings.Join(added, "\n"),
+						// Highlights: d.inner.Highlights,
+					},
+					Body: result.HighlightedString{
+						/*
+							Value:      c.CommitMatch.Body.Value,
+							Highlights: c.CommitMatch.Body.Highlights,
+						*/
+						// Value: strings.Join(added, "\n"),
+					},
+				},
+				db:                c.db,
+				gitCommitResolver: c.gitCommitResolver,
+				gitCommitOnce:     c.gitCommitOnce,
+			}
+		}
+		return nil
+	} else {
+		return nil
+	}
 }
 
 func (r *CommitSearchResultResolver) Commit() *GitCommitResolver {
