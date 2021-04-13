@@ -1,6 +1,7 @@
 import { Omit } from 'utility-types'
 
 import { SearchSuggestion } from '../suggestions'
+import { predicateCompletion } from './predicates'
 
 import { selectorCompletion } from './selectFilter'
 import { Filter, Literal } from './token'
@@ -228,6 +229,7 @@ export const FILTERS: Record<NegatableFilter, NegatableFilterDefinition> &
     [FilterType.repo]: {
         alias: 'r',
         negatable: true,
+        discreteValues: value => predicateCompletion('repo', value),
         description: negated =>
             `${negated ? 'Exclude' : 'Include only'} results from repositories matching the given search pattern.`,
         suggestions: 'Repository',
@@ -364,13 +366,15 @@ export const validateFilter = (
     if (!typeAndDefinition) {
         return { valid: false, reason: 'Invalid filter type.' }
     }
-    const { definition } = typeAndDefinition
+    // const { definition } = typeAndDefinition
+    /*
     if (definition.discreteValues && (!value || !isValidDiscreteValue(definition, value, value.value))) {
         return {
             valid: false,
             reason: `Invalid filter value, expected one of: ${definition.discreteValues(value).join(', ')}.`,
         }
     }
+    */
     return { valid: true }
 }
 

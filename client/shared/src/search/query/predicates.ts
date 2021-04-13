@@ -1,3 +1,5 @@
+import { Literal } from './token'
+
 interface Access {
     name: string
     fields?: Access[]
@@ -116,4 +118,9 @@ export const scanPredicate = (field: string, value: string): Predicate | undefin
     }
 
     return { path, parameters }
+}
+
+export const predicateCompletion = (field: string, value: Literal | undefined): string[] => {
+    const tree = resolveAccess([field], PREDICATES)
+    return ['contains.file', 'contains.content', 'contains(...)']
 }

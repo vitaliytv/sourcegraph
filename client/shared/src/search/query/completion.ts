@@ -278,23 +278,37 @@ export async function getCompletionItems(
         if (!resolvedFilter) {
             return null
         }
+        let staticSuggestions: Monaco.languages.CompletionItem[] = []
+        if (resolvedFilter.definition.discreteValues) {
+            staticSuggestions = resolvedFilter.definition.discreteValues(token.value).map(
+                (label, index): Monaco.languages.CompletionItem => ({
+                    label,
+                    sortText: index.toString(), // suggestions sort by order in the list, not alphabetically.
+                    kind: Monaco.languages.CompletionItemKind.Value,
+                    // eslint-disable-next-line no-template-curly-in-string
+                    insertText: 'contains(file:${1:CHANGELOG} content:${2:fix})',
+                    filterText: label,
+                    insertTextRules: Monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
+                    range: value ? toMonacoRange(value.range) : defaultRange,
+                    command: COMPLETION_ITEM_SELECTED,
+                })
+            )
+        }
+        let dynSuggestions: Monaco.languages.CompletionItem[] = []
         if (resolvedFilter.definition.suggestions) {
             if (Array.isArray(resolvedFilter.definition.suggestions)) {
-                return {
-                    suggestions: resolvedFilter.definition.suggestions.map(label => ({
-                        label,
-                        kind: Monaco.languages.CompletionItemKind.Text,
-                        insertText: label + ' ',
-                        range: value ? toMonacoRange(value.range) : defaultRange,
-                        command: COMPLETION_ITEM_SELECTED,
-                    })),
-                }
-            }
-            // If the filter definition has an associated suggestion type,
-            // use it to filter dynamic suggestions.
-            const suggestions = await dynamicSuggestions.pipe(first()).toPromise()
-            return {
-                suggestions: suggestions
+                dynSuggestions = resolvedFilter.definition.suggestions.map(label => ({
+                    label,
+                    kind: Monaco.languages.CompletionItemKind.Text,
+                    insertText: label + ' ',
+                    range: value ? toMonacoRange(value.range) : defaultRange,
+                    command: COMPLETION_ITEM_SELECTED,
+                }))
+            } else {
+                // If the filter definition has an associated suggestion type,
+                // use it to filter dynamic suggestions.
+                const suggestions = await dynamicSuggestions.pipe(first()).toPromise()
+                dynSuggestions = suggestions
                     .filter(({ __typename }) => __typename === resolvedFilter.definition.suggestions)
                     .map(suggestion => suggestionToCompletionItem(suggestion, { isFilterValue: true, globbing }))
                     .filter(isDefined)
@@ -306,24 +320,10 @@ export async function getCompletionItems(
                         filterText: value?.value,
                         range: value ? toMonacoRange(value.range) : defaultRange,
                         command: COMPLETION_ITEM_SELECTED,
-                    })),
+                    }))
             }
         }
-        if (resolvedFilter.definition.discreteValues) {
-            return {
-                suggestions: resolvedFilter.definition.discreteValues(token.value).map(
-                    (label, index): Monaco.languages.CompletionItem => ({
-                        label,
-                        sortText: index.toString(), // suggestions sort by order in the list, not alphabetically.
-                        kind: Monaco.languages.CompletionItemKind.Value,
-                        insertText: `${label} `,
-                        filterText: label,
-                        range: value ? toMonacoRange(value.range) : defaultRange,
-                        command: COMPLETION_ITEM_SELECTED,
-                    })
-                ),
-            }
-        }
+        return { suggestions: staticSuggestions.concat(dynSuggestions) }
     }
     return null
 }
