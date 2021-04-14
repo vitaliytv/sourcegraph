@@ -1,7 +1,8 @@
 import classNames from 'classnames'
 import AlertCircleIcon from 'mdi-react/AlertCircleIcon'
-import React, { FormEvent, useCallback, useEffect, useState } from 'react'
+import React, { FormEvent, useCallback, useEffect, useState, useRef } from 'react'
 import { RouteComponentProps } from 'react-router'
+import { Subscription } from 'rxjs'
 
 import { Form } from '@sourcegraph/branded/src/components/Form'
 import { Link } from '@sourcegraph/shared/src/components/Link'
@@ -24,6 +25,7 @@ import {
     AffiliatedRepositoriesResult,
 } from '../../../graphql-operations'
 import { queryUserPublicRepositories, setUserPublicRepositories } from '../../../site-admin/backend'
+import { eventLogger } from '../../../tracking/eventLogger'
 import { UserRepositoriesUpdateProps } from '../../../util'
 
 import { CheckboxRepositoryNode } from './RepositoryNode'
@@ -149,6 +151,7 @@ export const UserSettingsManageRepositoriesPage: React.FunctionComponent<Props> 
     const [codeHostFilter, setCodeHostFilter] = useState('')
     const [filteredRepos, setFilteredRepos] = useState<Repo[]>([])
     const [fetchingRepos, setFetchingRepos] = useState<initialFetchingReposState>()
+    const externalServiceSubscription = useRef<Subscription>()
 
     // since we're making many different GraphQL requests - track affiliate and
     // manually added public repo errors separately
@@ -364,6 +367,7 @@ export const UserSettingsManageRepositoriesPage: React.FunctionComponent<Props> 
     const submit = useCallback(
         async (event: FormEvent<HTMLFormElement>): Promise<void> => {
             event.preventDefault()
+            eventLogger.log('UserManageRepositoriesSave')
 
             let publicRepos = publicRepoState.repos.split('\n').filter((row): boolean => row !== '')
             if (!publicRepoState.enabled) {
@@ -415,7 +419,7 @@ export const UserSettingsManageRepositoriesPage: React.FunctionComponent<Props> 
             }
 
             const started = Date.now()
-            const externalServiceSubscription = queryExternalServices({
+            externalServiceSubscription.current = queryExternalServices({
                 first: null,
                 after: null,
                 namespace: userID,
@@ -456,7 +460,7 @@ export const UserSettingsManageRepositoriesPage: React.FunctionComponent<Props> 
                     () => {},
                     error => setAffiliateRepoProblems(asError(error)),
                     () => {
-                        externalServiceSubscription.unsubscribe()
+                        externalServiceSubscription.current?.unsubscribe()
                     }
                 )
         },
@@ -471,6 +475,13 @@ export const UserSettingsManageRepositoriesPage: React.FunctionComponent<Props> 
             history,
             routingPrefix,
         ]
+    )
+
+    useEffect(
+        () => () => {
+            externalServiceSubscription.current?.unsubscribe()
+        },
+        []
     )
 
     const handleRadioSelect = (changeEvent: React.ChangeEvent<HTMLInputElement>): void => {
