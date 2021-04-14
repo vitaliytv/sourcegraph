@@ -165,6 +165,13 @@ const config = {
             use: ['style-loader', 'css-loader'],
         })
 
+        config.module?.rules.unshift({
+            // TTF rule for monaco-editor
+            test: /\.ttf$/,
+            include: monacoEditorPaths,
+            use: ['file-loader'],
+        })
+
         config.module.rules.push({
             test: /\.ya?ml$/,
             use: ['raw-loader'],
