@@ -3,6 +3,7 @@ import { Page } from 'puppeteer'
 import { SharedGraphQlOperations } from '@sourcegraph/shared/src/graphql-operations'
 import { percySnapshot } from '@sourcegraph/shared/src/testing/driver'
 import { readEnvironmentBoolean } from '@sourcegraph/shared/src/testing/utils'
+import { REDESIGN_TOGGLE_KEY } from '@sourcegraph/shared/src/util/useRedesignToggle'
 
 import { WebGraphQlOperations } from '../graphql-operations'
 
@@ -98,8 +99,12 @@ export const percySnapshotWithVariants = async (
 
     // Theme-light with redesign
     await page.evaluate(() => document.documentElement.classList.add('theme-redesign'))
+    await page.evaluate(() => localStorage.setItem(REDESIGN_TOGGLE_KEY, 'true'))
+    await page.evaluate(() => window.dispatchEvent(new Event('storage')))
     await percySnapshot(page, `${name} - light theme with redesign enabled`)
     await page.evaluate(() => document.documentElement.classList.remove('theme-redesign'))
+    await page.evaluate(() => localStorage.setItem(REDESIGN_TOGGLE_KEY, 'false'))
+    await page.evaluate(() => window.dispatchEvent(new Event('storage')))
 
     // Theme-dark
     await setColorScheme(page, 'dark', config?.waitForCodeHighlighting)
@@ -107,8 +112,12 @@ export const percySnapshotWithVariants = async (
 
     // Theme-dark with redesign
     await page.evaluate(() => document.documentElement.classList.add('theme-redesign'))
+    await page.evaluate(() => localStorage.setItem(REDESIGN_TOGGLE_KEY, 'true'))
+    await page.evaluate(() => window.dispatchEvent(new Event('storage')))
     await percySnapshot(page, `${name} - dark theme with redesign enabled`)
     await page.evaluate(() => document.documentElement.classList.remove('theme-redesign'))
+    await page.evaluate(() => localStorage.setItem(REDESIGN_TOGGLE_KEY, 'false'))
+    await page.evaluate(() => window.dispatchEvent(new Event('storage')))
 
     // Reset to light theme
     await setColorScheme(page, 'light', config?.waitForCodeHighlighting)
