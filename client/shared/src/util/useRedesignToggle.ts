@@ -15,7 +15,9 @@ interface UseRedesignToggleReturn {
  * Used in the Web app and Storybook to toggle global CSS class - `REDESIGN_CLASS_NAME`.
  */
 export const useRedesignToggle = (initialValue = false): UseRedesignToggleReturn => {
-    const [isRedesignEnabled, setIsRedesignEnabled] = useLocalStorage(REDESIGN_TOGGLE_KEY, initialValue)
+    const [isRedesignEnabled, setIsRedesignEnabled] = useLocalStorage(REDESIGN_TOGGLE_KEY, initialValue, {
+        keepUpdated: true,
+    })
 
     return {
         isRedesignEnabled,
