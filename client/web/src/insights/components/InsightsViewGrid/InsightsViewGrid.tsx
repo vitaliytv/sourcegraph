@@ -118,6 +118,7 @@ export const InsightsViewGrid: React.FunctionComponent<InsightsViewGridProps> = 
                 autoSize={true}
                 rowHeight={6 * 16}
                 containerPadding={[0, 0]}
+                useCSSTransforms={false}
                 margin={[12, 12]}
                 onResizeStart={onResizeOrDragStart}
                 onDragStart={onResizeOrDragStart}
